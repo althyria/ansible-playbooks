@@ -1,0 +1,55 @@
+- name: bootstrap admin user and harden ssh
+  hosts: kubernetes
+  become: true
+  serial: 1
+  tasks:
+    - name: update system
+      ansible.builtin.apt:
+        upgrade: dist
+        update_cache: true
+
+    - name: install pkgs
+      ansible.builtin.apt:
+        name:
+          - sudo
+          - git
+          - tree
+        state: present
+
+    - name: create admin user
+      ansible.builtin.user:
+        name: admin
+        groups: sudo
+        append: true
+        shell: /bin/bash
+
+    - name: passwordless sudo for admin
+      ansible.builtin.copy:
+        content: "admin ALL=(ALL) NOPASSWD:ALL\n"
+        dest: /etc/sudoers.d/admin
+        owner: root
+        group: root
+        mode: '0440'
+        validate: /usr/sbin/visudo -cf %s
+
+    - name: transfer admin ssh keys
+      ansible.posix.authorized_key:
+        user: admin
+        key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1H+DW/wbAjrTBx6oLkHni4rfrwRfcXRjaWw3XW2BRk
+        exclusive: true
+
+    - name: copy hardened sshd_config
+      ansible.builtin.copy:
+        src: configs/sshd_config
+        dest: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: '0600'
+        validate: /usr/sbin/sshd -t -f %s
+      notify: restart sshd
+
+  handlers:
+    - name: restart sshd
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
