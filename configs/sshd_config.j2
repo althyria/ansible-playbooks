@@ -1,0 +1,96 @@
+# /etc/ssh/sshd_config
+# Managed by Ansible. Only non-default or deliberately pinned settings
+# live here; everything else falls back to OpenSSH defaults.
+#
+# There is no Include line on purpose: nothing in /etc/ssh/sshd_config.d/
+# can override this file. sshd uses the first value it sees for each
+# directive, so an Include at the top would let cloud-init or package
+# drop-ins silently undo the hardening below.
+
+# --- Connection limits ---
+
+# Unauthenticated connections are dropped after 30s (default 120s), which
+# shrinks the window for slow-drip connection exhaustion.
+LoginGraceTime 30
+
+# Disconnect after 3 failed attempts (default 6). With key-only auth,
+# legitimate users should never need more than a couple of tries.
+MaxAuthTries 3
+
+# Cap on multiplexed sessions per connection (default 10). Ansible and
+# ControlMaster reuse one connection for several sessions, so 4 leaves
+# headroom without leaving the default wide open.
+MaxSessions 4
+
+# --- Who can log in, and how ---
+
+# Root cannot log in over SSH at all (default is prohibit-password, which
+# still allows root keys). All access goes through admin plus sudo, so
+# actions are attributable to a named account.
+PermitRootLogin no
+
+# Allowlist: only admin may authenticate. Any other account, including
+# service accounts created later, is refused even if it has a valid key.
+# Add users here deliberately if more people need access.
+AllowUsers admin
+
+# Explicitly require a public key. Redundant with the settings below, but
+# it makes the intent obvious and protects against one of them being
+# changed by mistake.
+AuthenticationMethods publickey
+
+# Pinned explicitly (this is the default) so key auth can never be turned
+# off by accident or by a future change in distro defaults.
+PubkeyAuthentication yes
+
+# No password logins. Passwords can be guessed or brute-forced remotely;
+# keys cannot realistically be.
+PasswordAuthentication no
+
+# Pinned explicitly (this is the default). Even though password auth is
+# off, an empty password must never be accepted if that setting changes.
+PermitEmptyPasswords no
+
+# Keyboard-interactive is a second route to password-style prompts via
+# PAM, so it is closed as well.
+KbdInteractiveAuthentication no
+
+# Needed on Debian/Ubuntu for proper session setup (limits, logind,
+# environment) even though PAM is not used to authenticate here.
+UsePAM yes
+
+# --- Forwarding and tunnelling ---
+
+# Don't let a compromised client hijack the user's forwarded ssh-agent
+# to reach other hosts.
+AllowAgentForwarding no
+
+# "local" permits -L tunnels and ssh -J jump hosts but blocks remote (-R)
+# forwarding, which can expose internal services outward through a
+# reverse tunnel. Change to "no" if tunnelling isn't needed.
+AllowTcpForwarding local
+
+# Pinned explicitly (this is the default). X11 forwarding exposes the
+# client's display to the server, and servers here are headless anyway.
+X11Forwarding no
+
+# --- Logging and session hygiene ---
+
+# VERBOSE logs the fingerprint of the key used for each login, so you can
+# tell which key got in. Useful for auditing and incident response.
+LogLevel VERBOSE
+
+# Probe idle clients every 300s and drop after 2 missed replies, so dead
+# or abandoned sessions are cleaned up after about 10 minutes.
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# The motd is already shown by PAM, so sshd printing it again would
+# duplicate it.
+PrintMotd no
+
+# --- Subsystems ---
+
+# Required for sftp, and for scp on newer OpenSSH, which uses the SFTP
+# protocol under the hood.
+Subsystem sftp /usr/lib/openssh/sftp-server
